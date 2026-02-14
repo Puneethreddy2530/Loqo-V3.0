@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Loqo AI Agent v3 — Self-Correcting Image Generator</title>
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #141420;
+      --border: #2a2a3a;
+      --text: #e8e8f0;
+      --dim: #888898;
+      --accent: #7c5cfc;
+      --green: #4caf50;
+      --red: #ef5350;
+      --yellow: #ffc107;
+      --radius: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, 'Segoe UI', Roboto, monospace;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    header {
+      text-align: center;
+      padding: 32px 0 24px;
+    }
+
+    header h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #7c5cfc, #00d2ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    header p {
+      color: var(--dim);
+      font-size: 0.85rem;
+      margin-top: 8px;
+    }
+
+    .input-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .input-section label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .input-section textarea,
+    .input-section input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      color: var(--text);
+      font-size: 0.95rem;
+      font-family: inherit;
+      resize: vertical;
+    }
+
+    .input-section textarea:focus,
+    .input-section input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .input-section textarea {
+      min-height: 80px;
+    }
+
+    .input-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    @media (max-width: 640px) {
+      .input-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 14px 32px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+    }
+
+    .btn:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn.running {
+      background: var(--yellow);
+      color: #000;
+    }
+
+    /* Progress */
+    .progress {
+      display: none;
+      margin-bottom: 24px;
+    }
+
+    .progress.active {
+      display: block;
+    }
+
+    .progress-bar {
+      background: var(--surface);
+      border-radius: 20px;
+      height: 8px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #00d2ff);
+      transition: width 0.5s ease;
+      border-radius: 20px;
+    }
+
+    .progress-text {
+      font-size: 0.85rem;
+      color: var(--dim);
+      text-align: center;
+    }
+
+    /* Iteration timeline */
+    .timeline {
+      display: flex;
+      gap: 16px;
+      overflow-x: auto;
+      padding: 16px 0;
+      margin-bottom: 24px;
+    }
+
+    .iter-card {
+      min-width: 280px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      flex-shrink: 0;
+      transition: border-color 0.3s;
+    }
+
+    .iter-card.best {
+      border-color: var(--green);
+    }
+
+    .iter-card.current {
+      border-color: var(--accent);
+      box-shadow: 0 0 20px rgba(124, 92, 252, 0.2);
+    }
+
+    .iter-card img {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+      background: #1a1a2e;
+    }
+
+    .iter-info {
+      padding: 12px;
+    }
+
+    .iter-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .iter-num {
+      font-size: 0.75rem;
+      background: var(--accent);
+      color: white;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    .iter-score {
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .iter-score.pass {
+      color: var(--green);
+    }
+
+    .iter-score.fail {
+      color: var(--red);
+    }
+
+    .iter-mode {
+      font-size: 0.7rem;
+      color: var(--dim);
+    }
+
+    .iter-criteria {
+      margin-top: 8px;
+    }
+
+    .criterion-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      font-size: 0.8rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .criterion-row:last-child {
+      border-bottom: none;
+    }
+
+    .criterion-name {
+      color: var(--dim);
+      max-width: 60%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .criterion-badge {
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    .criterion-badge.pass {
+      background: rgba(76, 175, 80, 0.2);
+      color: var(--green);
+    }
+
+    .criterion-badge.fail {
+      background: rgba(239, 83, 80, 0.2);
+      color: var(--red);
+    }
+
+    /* Polish card */
+    .iter-card.polish {
+      border-color: #ffd700;
+      box-shadow: 0 0 24px rgba(255, 215, 0, 0.25);
+    }
+
+    .polish-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      background: linear-gradient(135deg, #ffd700, #ffaa00);
+      color: #000;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 700;
+      margin-left: 6px;
+    }
+
+    .res-badge {
+      font-size: 0.65rem;
+      background: rgba(124, 92, 252, 0.15);
+      color: var(--accent);
+      padding: 1px 6px;
+      border-radius: 3px;
+      margin-left: 6px;
+    }
+
+    /* Result panel */
+    .result-panel {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+
+    .result-panel.active {
+      display: block;
+    }
+
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .result-status {
+      font-size: 1.2rem;
+      font-weight: 700;
+    }
+
+    .result-status.success {
+      color: var(--green);
+    }
+
+    .result-status.best_effort {
+      color: var(--yellow);
+    }
+
+    .final-image {
+      text-align: center;
+      margin: 16px 0;
+    }
+
+    .final-image img {
+      max-width: 512px;
+      width: 100%;
+      border-radius: var(--radius);
+      border: 2px solid var(--border);
+    }
+
+    .prompt-evolution {
+      margin-top: 16px;
+    }
+
+    .prompt-evolution h3 {
+      font-size: 0.85rem;
+      color: var(--dim);
+      margin-bottom: 8px;
+    }
+
+    .prompt-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      margin-bottom: 8px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .prompt-label {
+      font-size: 0.7rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .mistakes {
+      margin-top: 16px;
+    }
+
+    .mistakes h3 {
+      font-size: 0.85rem;
+      color: var(--dim);
+      margin-bottom: 8px;
+    }
+
+    .mistake-item {
+      background: var(--bg);
+      border-left: 3px solid var(--yellow);
+      padding: 8px 12px;
+      margin-bottom: 6px;
+      font-size: 0.8rem;
+      border-radius: 0 6px 6px 0;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .stat {
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .stat-label {
+      font-size: 0.7rem;
+      color: var(--dim);
+      margin-top: 4px;
+    }
+
+    /* Lightbox / Zoom Modal */
+    .lightbox {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.92);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .lightbox.active {
+      display: flex;
+    }
+
+    .lightbox img {
+      max-width: 90vw;
+      max-height: 80vh;
+      object-fit: contain;
+      border-radius: 8px;
+      box-shadow: 0 0 40px rgba(124, 58, 237, 0.3);
+    }
+
+    .lightbox-close {
+      position: absolute;
+      top: 20px;
+      right: 24px;
+      font-size: 2rem;
+      color: white;
+      cursor: pointer;
+      background: none;
+      border: none;
+      z-index: 10000;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+
+    .lightbox-close:hover {
+      opacity: 1;
+    }
+
+    .lightbox-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .lightbox-btn {
+      padding: 8px 20px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+      backdrop-filter: blur(10px);
+    }
+
+    .lightbox-btn:hover {
+      background: rgba(124, 58, 237, 0.5);
+      border-color: var(--accent);
+    }
+
+    /* Clickable iteration images */
+    .iter-card img {
+      cursor: zoom-in;
+    }
+
+    .final-image img {
+      cursor: zoom-in;
+    }
+
+    /* Download bar under final image */
+    .download-bar {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 12px;
+    }
+
+    .download-btn {
+      padding: 8px 18px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+
+    .download-btn:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <h1>Loqo AI Agent v3</h1>
+      <p>Self-Correcting Image Generator — LATS + Reflexion + Gemini 2.5 Flash Image</p>
+    </header>
+
+    <div class="input-section">
+      <div class="input-row">
+        <div>
+          <label>Image Prompt</label>
+          <textarea id="prompt"
+            placeholder="A professional product photo of a coffee mug on a wooden table with warm lighting...">A marketing banner with bold text "SALE 50% OFF" inside a burgundy red box, on a light green background, with clean modern typography</textarea>
+        </div>
+        <div>
+          <label>Criteria (comma separated)</label>
+          <textarea id="criteria"
+            placeholder="warm color tone, sharp focus, product centered...">text inside boxes, burgundy red color, lighter green background, readable typography</textarea>
+        </div>
+      </div>
+      <div style="grid-column: 1 / -1; margin-bottom: 16px;">
+        <label>Upload Image (optional — edit mode)</label>
+        <input type="file" id="imageUpload" accept="image/*"
+          style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);">
+        <div id="imagePreview" style="margin-top:8px;display:none;">
+          <img id="previewImg" style="max-height:120px;border-radius:8px;border:1px solid var(--border);">
+          <span onclick="clearImage()" style="cursor:pointer;color:var(--red);margin-left:8px;font-size:0.8rem;">✕
+            Remove</span>
+        </div>
+      </div>
+      <button class="btn" id="generateBtn" onclick="startGeneration()">Generate & Self-Correct</button>
+    </div>
+
+    <div class="progress" id="progress">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-text" id="progressText">Initializing...</div>
+    </div>
+
+    <div class="timeline" id="timeline"></div>
+
+    <div class="result-panel" id="resultPanel">
+      <div class="result-header">
+        <div class="result-status" id="resultStatus"></div>
+        <div id="resultTime" style="color: var(--dim); font-size: 0.85rem;"></div>
+      </div>
+
+      <div class="final-image" id="finalImage"></div>
+
+      <div class="stats" id="stats"></div>
+
+      <div class="prompt-evolution" id="promptEvolution"></div>
+
+      <div class="mistakes" id="mistakes"></div>
+    </div>
+  </div>
+
+  <!-- Lightbox Modal -->
+  <div class="lightbox" id="lightbox" onclick="closeLightbox(event)">
+    <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+    <img id="lightboxImg" src="" alt="Zoomed image">
+    <div class="lightbox-actions">
+      <button class="lightbox-btn" onclick="downloadImage('png')">⬇ Download PNG</button>
+      <button class="lightbox-btn" onclick="downloadImage('jpg')">⬇ Download JPG</button>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let maxIters = 5;
+    let uploadedImageB64 = null;
+
+    document.getElementById('imageUpload').addEventListener('change', function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function (ev) {
+        uploadedImageB64 = ev.target.result.split(',')[1];
+        document.getElementById('previewImg').src = ev.target.result;
+        document.getElementById('imagePreview').style.display = 'block';
+        // Disable prompt field — agent will auto-describe
+        const promptEl = document.getElementById('prompt');
+        promptEl.disabled = true;
+        promptEl.value = '';
+        promptEl.placeholder = '✨ Prompt will be auto-generated from your uploaded image';
+        promptEl.style.opacity = '0.5';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    function clearImage() {
+      uploadedImageB64 = null;
+      document.getElementById('imageUpload').value = '';
+      document.getElementById('imagePreview').style.display = 'none';
+      // Re-enable prompt field
+      const promptEl = document.getElementById('prompt');
+      promptEl.disabled = false;
+      promptEl.placeholder = 'A professional product photo of a coffee mug on a wooden table with warm lighting...';
+      promptEl.style.opacity = '1';
+    }
+
+    function startGeneration() {
+      const prompt = document.getElementById('prompt').value.trim();
+      const criteria = document.getElementById('criteria').value.trim();
+
+      if (!criteria) { alert('Enter criteria'); return; }
+      if (!prompt && !uploadedImageB64) { alert('Enter a prompt or upload an image'); return; }
+
+      const btn = document.getElementById('generateBtn');
+      btn.disabled = true;
+      btn.className = 'btn running';
+      btn.textContent = uploadedImageB64 ? 'Editing...' : 'Generating...';
+
+      document.getElementById('progress').className = 'progress active';
+      document.getElementById('progressFill').style.width = '5%';
+      document.getElementById('progressText').textContent = 'Connecting to agent...';
+      document.getElementById('timeline').innerHTML = '';
+      document.getElementById('resultPanel').className = 'result-panel';
+
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${location.host}/ws/generate`);
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          prompt: prompt,
+          criteria: criteria.split(',').map(c => c.trim()).filter(Boolean),
+          image_b64: uploadedImageB64,
+        }));
+        document.getElementById('progressText').textContent = uploadedImageB64 ? 'Analyzing uploaded image...' : 'Generating first image...';
+        document.getElementById('progressFill').style.width = '10%';
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'iteration') handleIteration(msg.data);
+        else if (msg.type === 'result') handleResult(msg.data);
+        else if (msg.type === 'status') {
+          document.getElementById('progressText').textContent = msg.message || 'Processing...';
+        }
+        else if (msg.type === 'error') handleError(msg.message);
+      };
+
+      ws.onerror = () => handleError('WebSocket connection failed');
+      ws.onclose = () => { btn.disabled = false; btn.className = 'btn'; btn.textContent = 'Generate & Self-Correct'; };
+    }
+
+    function handleIteration(data) {
+      // Handle restart marker
+      if (data.restart) {
+        const sep = document.createElement('div');
+        sep.style.cssText = 'min-width:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;flex-shrink:0;';
+        sep.innerHTML = `
+      <div style="width:2px;height:30px;background:var(--yellow);"></div>
+      <div style="font-size:0.7rem;color:var(--yellow);white-space:nowrap;writing-mode:vertical-lr;">RESTART ${data.attempt || ''}</div>
+      <div style="width:2px;height:30px;background:var(--yellow);"></div>
+    `;
+        document.getElementById('timeline').appendChild(sep);
+        document.getElementById('progressText').textContent = data.message || 'Restarting...';
+        return;
+      }
+
+      const iter = data.iteration || 1;
+      const globalIter = data.global_iteration || iter;
+      const attempt = data.attempt || 1;
+      const score = data.overall_score || 0;
+      const passed = data.all_passed || false;
+      const scoreDrop = data.score_dropped || false;
+      const bestSoFar = data.best_score_so_far || score;
+      const pct = Math.min(95, 10 + (globalIter / (maxIters * 3)) * 85);
+
+      document.getElementById('progressFill').style.width = pct + '%';
+      document.getElementById('progressText').textContent = passed
+        ? `✓ All criteria passed at iteration ${globalIter}!`
+        : `Attempt ${attempt} · Iter ${iter}/${maxIters} — Score: ${(score * 100).toFixed(0)}%${scoreDrop ? ' (↓ reverted to best)' : ''} — Best: ${(bestSoFar * 100).toFixed(0)}%`;
+
+      const imgB64 = data.image_b64 || null;
+      const isPolish = data.polish === true;
+      const resolution = data.resolution || '';
+      const resLabel = resolution ? resolution.split('x')[0] + 'px' : '';
+
+      const card = document.createElement('div');
+      card.className = `iter-card ${passed ? 'best' : ''} ${isPolish ? 'polish' : ''} current`;
+
+      document.querySelectorAll('.iter-card.current').forEach(c => c.classList.remove('current'));
+
+      let criteriaHTML = '';
+      if (data.criteria_results) {
+        for (const cr of data.criteria_results) {
+          const p = cr.passed;
+          criteriaHTML += `<div class="criterion-row">
+        <span class="criterion-name" title="${cr.criterion}">${cr.criterion}</span>
+        <span class="criterion-badge ${p ? 'pass' : 'fail'}">${(cr.score * 100).toFixed(0)}%</span>
+      </div>`;
+        }
+      }
+
+      const dropBadge = scoreDrop ? '<span style="font-size:0.65rem;background:rgba(255,193,7,0.2);color:var(--yellow);padding:1px 5px;border-radius:3px;margin-left:4px;">↓ reverted</span>' : '';
+      const resBadge = resLabel ? `<span class="res-badge">${resLabel}</span>` : '';
+      const polishBadge = isPolish ? '<span class="polish-badge">✨ Final 1024px Polish</span>' : '';
+
+      const iterLabel = isPolish
+        ? `Polish${polishBadge}`
+        : `${attempt > 1 ? 'A' + attempt + ' · ' : ''}Iter ${iter}${resBadge}`;
+
+      card.innerHTML = `
+    ${imgB64 ? `<img src="data:image/png;base64,${imgB64}" alt="Iteration ${iter}" onclick="openLightbox(this.src)">` : '<div style="height:200px;display:flex;align-items:center;justify-content:center;color:var(--dim)">Generating...</div>'}
+    <div class="iter-info">
+      <div class="iter-header">
+        <span class="iter-num">${iterLabel}</span>
+        <span class="iter-score ${passed ? 'pass' : 'fail'}">${(score * 100).toFixed(0)}%${dropBadge}</span>
+      </div>
+      <div class="iter-mode">${isPolish ? data.message || 'Final high-res polish' : (data.prompt_used ? data.prompt_used.substring(0, 80) + '...' : '')}</div>
+      <div class="iter-criteria">${criteriaHTML}</div>
+    </div>
+  `;
+
+      document.getElementById('timeline').appendChild(card);
+      card.scrollIntoView({ behavior: 'smooth', inline: 'end' });
+    }
+
+    function handleResult(data) {
+      document.getElementById('progressFill').style.width = '100%';
+      document.getElementById('progressText').textContent = 'Complete!';
+
+      const panel = document.getElementById('resultPanel');
+      panel.className = 'result-panel active';
+
+      // Status
+      const status = document.getElementById('resultStatus');
+      status.textContent = data.status === 'success' ? '✓ All Criteria Met!' : '◐ Best Effort Result';
+      status.className = `result-status ${data.status}`;
+
+      document.getElementById('resultTime').textContent = `${data.processing_time_seconds}s · ${data.total_iterations} iteration(s) · ${data.total_attempts || 1} attempt(s)`;
+
+      // Final image with zoom + download
+      if (data.best_image_b64) {
+        document.getElementById('finalImage').innerHTML = `
+          <img src="data:image/png;base64,${data.best_image_b64}" alt="Final result" onclick="openLightbox(this.src)">
+          <div class="download-bar">
+            <button class="download-btn" onclick="downloadFinal('png')">⬇ Download PNG</button>
+            <button class="download-btn" onclick="downloadFinal('jpg')">⬇ Download JPG</button>
+          </div>
+        `;
+        window._finalImageB64 = data.best_image_b64;
+      }
+
+      // Stats
+      document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="stat-value">${(data.final_score * 100).toFixed(0)}%</div><div class="stat-label">Final Score</div></div>
+    <div class="stat"><div class="stat-value">${data.total_iterations}</div><div class="stat-label">Iterations</div></div>
+    <div class="stat"><div class="stat-value">${data.total_attempts || 1}</div><div class="stat-label">Attempts</div></div>
+    <div class="stat"><div class="stat-value">${data.processing_time_seconds}s</div><div class="stat-label">Total Time</div></div>
+    <div class="stat"><div class="stat-value">${data.criteria_results ? data.criteria_results.filter(c => c.passed).length : 0}/${data.criteria_results ? data.criteria_results.length : 0}</div><div class="stat-label">Criteria Passed</div></div>
+  `;
+
+      // Prompt evolution
+      const promptDiv = document.getElementById('promptEvolution');
+      let promptHTML = '<h3>Prompt Evolution</h3>';
+      promptHTML += `<div class="prompt-label">Original</div><div class="prompt-box">${data.original_prompt || ''}</div>`;
+      if (data.final_prompt && data.final_prompt !== data.original_prompt) {
+        promptHTML += `<div class="prompt-label">Final (Rewritten)</div><div class="prompt-box">${data.final_prompt || ''}</div>`;
+      }
+      promptDiv.innerHTML = promptHTML;
+
+      // Mistake log
+      const mistakesDiv = document.getElementById('mistakes');
+      if (data.mistake_log && data.mistake_log.some(m => m)) {
+        let mHTML = '<h3>Lessons Learned (Reflexion Memory)</h3>';
+        for (const m of data.mistake_log) {
+          if (m) mHTML += `<div class="mistake-item">${m}</div>`;
+        }
+        mistakesDiv.innerHTML = mHTML;
+      }
+
+      panel.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function handleError(msg) {
+      document.getElementById('progressText').textContent = `Error: ${msg}`;
+      document.getElementById('progressFill').style.width = '0%';
+      const btn = document.getElementById('generateBtn');
+      btn.disabled = false; btn.className = 'btn'; btn.textContent = 'Generate & Self-Correct';
+    }
+
+    /* Lightbox functions */
+    function openLightbox(src) {
+      document.getElementById('lightboxImg').src = src;
+      document.getElementById('lightbox').classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeLightbox(e) {
+      if (e && e.target && e.target.tagName === 'IMG') return; // Don't close when clicking image
+      document.getElementById('lightbox').classList.remove('active');
+      document.body.style.overflow = '';
+    }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+
+    /* Download functions */
+    function downloadImage(format) {
+      const src = document.getElementById('lightboxImg').src;
+      _downloadFromSrc(src, format);
+    }
+    function downloadFinal(format) {
+      if (!window._finalImageB64) return;
+      const src = `data:image/png;base64,${window._finalImageB64}`;
+      _downloadFromSrc(src, format);
+    }
+    function _downloadFromSrc(src, format) {
+      const canvas = document.createElement('canvas');
+      const img = new window.Image();
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        const mime = format === 'jpg' ? 'image/jpeg' : 'image/png';
+        const url = canvas.toDataURL(mime, 0.95);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `loqo-output-${Date.now()}.${format}`;
+        a.click();
+      };
+      img.src = src;
+    }
+  </script>
+</body>
+
+</html>
